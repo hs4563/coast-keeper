@@ -1,0 +1,3456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Coast Keeper</title>
+
+<style>
+html, body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+    font-family: Arial, sans-serif;
+}
+
+canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+}
+
+#menu {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+#menu img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.menuButtons {
+    z-index: 10;
+    display: flex;
+    gap: 20px;
+    margin-top: 320px;
+}
+
+button {
+    padding: 18px 42px;
+    font-size: 28px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    background: rgba(20,20,20,0.85);
+    color: white;
+}
+
+button:hover {
+    transform: scale(1.05);
+}
+
+#gameCanvas {
+    display: none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="menu">
+    <img src="title.png">
+
+    <div class="menuButtons">
+        <button id="playBtn">PLAY</button>
+        <button id="quitBtn">QUIT</button>
+    </div>
+</div>
+
+<div id="endingText"
+style="
+position:absolute;
+bottom:80px;
+width:100%;
+text-align:center;
+font-size:42px;
+font-weight:bold;
+color:red;
+display:none;
+pointer-events:none;
+">
+IT'S NOT OVER YET, KID...
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+let worldDarkness = 0;
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const coastlingImg = new Image();
+coastlingImg.src = "coastling.png";
+
+const adultImg = new Image();
+adultImg.src = "adult.png";
+
+const adultRestImg = new Image();
+adultRestImg.src = "adultRest.png";
+
+const fishImg = new Image();
+fishImg.src = "fish.png";
+
+const crabImg = new Image();
+crabImg.src = "crab.png";
+
+const filterImg = new Image();
+filterImg.src = "filter.png";
+
+const clickerImg = new Image();
+clickerImg.src = "clicker.png";
+
+const clickerRestImg = new Image();
+clickerRestImg.src = "clickerRest.png";
+
+const coodaImg = new Image();
+coodaImg.src = "cooda.png";
+
+const jellyImg = new Image();
+jellyImg.src = "jelly.png";
+
+const voomerLeftImg = new Image();
+voomerLeftImg.src = "voomerDown.png";
+
+const voomerRightImg = new Image();
+voomerRightImg.src = "voomerUp.png";
+
+const viperheadImg = new Image();
+viperheadImg.src = "viperhead.png";
+
+const grassImg = new Image();
+grassImg.src = "grass.png";
+
+const witheredGrassImg = new Image();
+witheredGrassImg.src = "witheredGrass.png";
+
+const bowlderImg = new Image();
+bowlderImg.src = "bowlder.png";
+
+const bigBowlderImg = new Image();
+bigBowlderImg.src = "bigBowlder.png";
+
+const brokenBoatImg = new Image();
+brokenBoatImg.src = "brokenBoat.png"
+
+const cumberkelpImg = new Image();
+cumberkelpImg.src = "cumberkelp.png";
+
+const playerFrontImg = new Image();
+playerFrontImg.src = "playerFront.png";
+
+const playerBackImg = new Image();
+playerBackImg.src = "playerBack.png";
+
+const hologramImg = new Image();
+hologramImg.src = "hologram.png";
+
+const jetskiFrontImg = new Image();
+jetskiFrontImg.src = "jetskiFront.png";
+
+const jetskiBackImg = new Image();
+jetskiBackImg.src = "jetskiBack.png";
+
+const jetskiEmptyImg = new Image();
+jetskiEmptyImg.src = "jetski.png";
+
+const bgMusic = new Audio("music.mp3");
+const darkMusic = new Audio("dark.mp3");
+const seaMusic = new Audio("sea.mp3");
+
+darkMusic.loop = true;
+seaMusic.loop = true;
+
+darkMusic.volume = 0.6;
+seaMusic.volume = 0.6;
+
+function updateBiomeMusic() {
+    const tile = getTileAt(player.x, player.y);
+    const inOcean = (
+        tile === WATER &&
+        player.x > MAP_W * TILE * 0.65
+    );
+
+    if (tile === SHADOWLAND) {
+        if (seaMusic && !seaMusic.paused) seaMusic.pause();
+        if (bgMusic && !bgMusic.paused) bgMusic.pause();
+
+        if (darkMusic.paused) {
+            darkMusic.play().catch(()=>{});
+        }
+    }
+    else if (inOcean) {
+        if (darkMusic && !darkMusic.paused) darkMusic.pause();
+        if (bgMusic && !bgMusic.paused) bgMusic.pause();
+
+        if (seaMusic.paused) {
+            seaMusic.play().catch(()=>{});
+        }
+    }
+    else {
+        if (darkMusic && !darkMusic.paused) darkMusic.pause();
+        if (seaMusic && !seaMusic.paused) seaMusic.pause();
+
+        if (bgMusic.paused) {
+            bgMusic.play().catch(()=>{});
+        }
+    }
+}
+
+
+const takeDamageSound = new Audio("takeDamage.mp3");
+takeDamageSound.volume = 0.6;
+
+bgMusic.loop = true;
+bgMusic.volume = 0.5;
+
+let playerFacing = "front";
+
+const VIEW_W = 1280;
+const VIEW_H = 720;
+
+canvas.width = VIEW_W;
+canvas.height = VIEW_H;
+
+const WORLD_OFFSET = 80;
+const TILE = 40;
+const MAP_W = 320;
+const MAP_H = 320;
+
+
+const LAND = 0;
+const WATER = 1;
+const ROCK = 2;
+
+const GRASS = 3;
+const SAND = 4;
+const WALL = 5;
+const FLOOR = 6;
+const SHADOWLAND = 7;
+
+const SANCTUARY_WALL = 8;
+const SANCTUARY_FLOOR = 9;
+
+const building = {
+    x: 48 + WORLD_OFFSET,
+    y: 48 + WORLD_OFFSET,
+    w: 26,
+    h: 18
+};
+
+let waterBootsCollected = false;
+
+const waterBootsImg = new Image();
+waterBootsImg.src = "waterboots.png";
+
+const waterBoots = {
+    x: (building.x + building.w - 5) * TILE,
+    y: (building.y + 9) * TILE,
+    collected: false
+};
+
+let flippersCollected = false;
+
+const flipperImg = new Image();
+flipperImg.src = "flipper.png";
+
+const backpackImg = new Image();
+backpackImg.src = "backpack.png";
+let backpackCollected = false;
+
+const binocularsImg = new Image();
+binocularsImg.src = "binoculars.png";
+let binocularsCollected = false;
+
+const helicopterImg = new Image();
+helicopterImg.src = "helicopter.png";
+let endingTriggered = false;
+
+const world = [];
+
+for(let y=0;y<MAP_H;y++) {
+
+    world[y] = [];
+
+    for(let x=0;x<MAP_W;x++) {
+
+        let tile;
+        const shadowRadius = 150;
+
+        const dxShadow = x;
+        const dyShadow = (MAP_H - 1) - y;
+
+        const inShadowBiome = Math.hypot(dxShadow, dyShadow) < shadowRadius;
+        const shadowEdgeRiver =
+        Math.abs(
+        Math.hypot(dxShadow, dyShadow)
+        - shadowRadius
+        ) < 3;
+        if(inShadowBiome) {
+
+        tile = SHADOWLAND;
+        }
+        else {
+        // existing coastline generation code
+        
+
+        // unified coastline
+        const oceanEdge = Math.floor(MAP_W * 0.65);
+
+        const river0 =
+        Math.sin(y * 0.04) * 12 +
+        Math.sin(y * 0.011) * 7 +
+        MAP_W * 0.10;
+
+        // unified river equations
+        const river1 =
+            Math.sin(y * 0.05) * 10 +
+            Math.sin(y * 0.013) * 6 +
+            MAP_W * 0.22;
+
+        const centerPull =
+        Math.sin((y / MAP_H) * Math.PI) * 28;
+
+        const river2 =
+        Math.sin(y * 0.03) * 8 +
+        Math.sin(y * 0.02) * 5 +
+        MAP_W * 0.45 -
+        centerPull;
+
+        const river3 =
+            Math.sin(y * 0.08) * 6 +
+            MAP_W * 0.58;
+
+        // giant east ocean
+        if(x > oceanEdge) {
+
+            tile = WATER;
+
+        }
+        // rivers
+        else if(
+            shadowEdgeRiver ||
+            Math.abs(x - river0) < 3 ||   // wider left river
+            Math.abs(x - river1) < 2 ||
+            Math.abs(x - river2) < 2 ||
+            Math.abs(x - river3) < 2
+            ) {
+            tile = WATER;
+
+        }
+        else {
+
+            // beach strip
+            if(
+                x >= oceanEdge - 4 &&
+                x <= oceanEdge
+            ) {
+
+                tile = SAND;
+
+            } else {
+
+                tile = LAND;
+
+                const r = Math.random();
+
+                if(r < 0.04)
+                    tile = ROCK;
+                else if(r < 0.12)
+                    tile = GRASS;
+            }
+        }
+
+        
+    }
+    world[y][x] = tile;
+    }
+}
+
+const player = {
+    x: (MAP_W / 2) * TILE,
+    y: (MAP_H / 2) * TILE,
+    size: 18,
+
+    hp: 100,
+    maxHp: 100,
+    food: 100,
+    water: 100,
+    speed: 2.6
+};
+
+
+const coastlings = [];
+for(let i=0;i<40;i++) {
+
+    let sx, sy;
+
+    while(true) {
+
+    sx = Math.random() * MAP_W * TILE;
+    sy = Math.random() * MAP_H * TILE;
+
+    const tx = Math.floor(sx / TILE);
+    const ty = Math.floor(sy / TILE);
+
+    // retry if inside building
+    if(
+        tx >= building.x &&
+        tx < building.x + building.w &&
+        ty >= building.y &&
+        ty < building.y + building.h
+    ) {
+        continue;
+    }
+
+    break;
+    }
+
+
+    coastlings.push({
+        x: sx,
+        y: sy,
+        speed: 1.4,
+        damageCooldown: 0,
+        facing: 1
+    });
+}
+
+const adultCoastlings = [];
+for(let i=0;i<5;i++) {
+    let sx, sy;
+
+    while(true) {
+
+    sx = Math.random() * MAP_W * TILE;
+    sy = Math.random() * MAP_H * TILE;
+
+    const tx = Math.floor(sx / TILE);
+    const ty = Math.floor(sy / TILE);
+
+    // retry if inside building
+    if(
+        tx >= building.x &&
+        tx < building.x + building.w &&
+        ty >= building.y &&
+        ty < building.y + building.h
+    ) {
+        continue;
+    }
+
+    break;
+    }
+
+    adultCoastlings.push({
+        x: sx,
+        y: sy,
+        speed: 3,
+        damageCooldown: 0,
+        facing: 1,
+        aggroed: false
+    });
+}
+
+const fishes = [];
+for(let i=0;i<240;i++) {
+
+    let fx, fy;
+
+    while(true) {
+
+        fx = Math.random() * MAP_W * TILE;
+        fy = Math.random() * MAP_H * TILE;
+
+        if(getTileAt(fx, fy) === WATER)
+            break;
+    }
+
+    fishes.push({
+        x: fx,
+        y: fy,
+        dirX: Math.random() < 0.5 ? -1 : 1,
+        dirY: Math.random() * 2 - 1,
+        speed: 1.2
+    });
+}
+
+
+const clickers = [];
+for(let i=0;i<24;i++) {
+
+    let cx, cy;
+
+    while(true) {
+
+        cx = Math.random() * MAP_W * TILE;
+        cy = Math.random() * MAP_H * TILE;
+
+        // ONLY ocean area
+        if(
+            getTileAt(cx, cy) === WATER &&
+            cx > MAP_W * TILE * 0.65
+        ) {
+            break;
+        }
+    }
+
+    clickers.push({
+        x: cx,
+        y: cy,
+        dirX: Math.random() < 0.5 ? -1 : 1,
+        dirY: Math.random() * 2 - 1,
+        speed: 2.2,
+        damageCooldown: 0,
+        flipTimer: Math.random()*60,
+        currentSprite: clickerImg
+    });
+}
+
+const coodas = [];
+
+const packCenterX =
+    MAP_W * TILE * 0.825;
+
+const packCenterY =
+    MAP_H * TILE * 0.25;
+
+for(let i = 0; i < 13; i++) {
+
+    coodas.push({
+
+        x: packCenterX + (Math.random() - 0.5) * 200,
+        y: packCenterY + (Math.random() - 0.5) * 200,
+
+        dirX: Math.random() < 0.5 ? -1 : 1,
+        dirY: Math.random() * 2 - 1,
+
+        speed: 3.8, // faster than clicker, slower than voomer
+
+        damageCooldown: 0
+    });
+}
+
+const jellies = [];
+for(let i=0;i<17;i++) {
+
+    let jx, jy;
+
+    while(true) {
+
+        jx = Math.random() * MAP_W * TILE;
+        jy = Math.random() * MAP_H * TILE;
+
+        // ONLY ocean area
+        if(
+            getTileAt(jx, jy) === WATER &&
+            jx > MAP_W * TILE * 0.65
+        ) {
+            break;
+        }
+    }
+
+    jellies.push({
+        x: jx,
+        y: jy,
+        dirX: Math.random() < 0.5 ? -1 : 1,
+        dirY: Math.random() * 2 - 1,
+
+        speed: 0.7, // much slower
+
+        damageCooldown: 0,
+
+        pulseTimer: Math.random() * 60
+    });
+}
+
+const voomer = {
+    x: MAP_W * TILE * 0.86,
+    y: MAP_H * TILE * 0.68,
+
+    speed: 5.8,
+
+    damageCooldown: 0,
+
+    facing: 1,
+
+    flipTimer: 0,
+
+    currentSprite: voomerLeftImg
+};
+
+const viperAttackEffects = [];
+const viperheads = [];
+
+for(let i = 0; i < 5; i++) {
+
+    let vx, vy;
+
+    while(true) {
+
+        const tx = Math.floor(Math.random() * MAP_W);
+        const ty = Math.floor(Math.random() * MAP_H);
+
+        if(world[ty][tx] === SHADOWLAND) {
+
+            vx = tx * TILE + TILE/2;
+            vy = ty * TILE + TILE/2;
+            break;
+        }
+    }
+
+    viperheads.push({
+        x: vx,
+        y: vy,
+
+        // midway between coastling (1.4)
+        // and adult (3)
+        speed: 2.2,
+
+        facing: 1,
+
+        attackCooldown: 0,
+        aggroed: false
+    });
+}
+
+
+const crabs = [];
+
+for(let i=0;i<10;i++) {
+
+    let cx, cy;
+
+    while(true) {
+
+        cx = Math.random() * MAP_W * TILE;
+        cy = Math.random() * MAP_H * TILE;
+
+        // cannot spawn inside walls
+        if(getTileAt(cx, cy) !== WALL)
+            break;
+    }
+
+    crabs.push({
+
+        centerX: cx,
+        centerY: cy,
+
+        x: cx,
+        y: cy,
+
+        angle: Math.random() * Math.PI * 2,
+
+        radius: 70 + Math.random() * 60,
+
+        speed: 0.045 + Math.random() * 0.02,
+
+        collected: false
+    });
+}
+
+const filters = [];
+// place filters ONLY on land touching water
+for(let y=1;y<MAP_H-1;y++) {
+    for(let x=1;x<MAP_W-1;x++) {
+        if(
+            x >= building.x &&
+            x < building.x + building.w &&
+            y >= building.y &&
+            y < building.y + building.h
+        ) {
+            continue;
+        }
+
+        // only on mainland near ocean edge
+        if(world[y][x] !== LAND &&
+        world[y][x] !== SHADOWLAND)
+            continue;
+
+        // random sparse placement
+        if(Math.random() > 0.007)
+            continue;
+
+        let touchingWater = false;
+        let touchingOcean = false;
+
+        for(let oy=-1;oy<=1;oy++) {
+            for(let ox=-1;ox<=1;ox++) {
+
+                if(world[y+oy][x+ox] === WATER) {
+
+                    touchingWater = true;
+
+                    // ONLY right-side ocean
+                    if(x > MAP_W * 0.60)
+                        touchingOcean = true;
+                }
+            }
+        }
+
+        if(touchingWater && !touchingOcean) {
+
+            filters.push({
+                x: x * TILE + TILE/2,
+                y: y * TILE + TILE/2
+            });
+        }
+    }
+}
+
+const sceneryGrass = [];
+const witheredGrass = [];
+const bowlders = [];
+const bigBowlders = [];
+const cumberkelps = [];
+const brokenBoats = [];
+
+for(let y=0;y<MAP_H;y++) {
+    for(let x=0;x<MAP_W;x++) {
+                // prevent scenery spawning inside building
+        if(
+            x >= building.x &&
+            x < building.x + building.w &&
+            y >= building.y &&
+            y < building.y + building.h
+        ) {
+            continue;
+        }
+
+        // ONLY LAND
+        if(world[y][x] !== LAND &&
+        world[y][x] !== SHADOWLAND)
+            continue;
+
+        // exact center of tile
+        const px = x * TILE + TILE/2;
+        const py = y * TILE + TILE/2;
+
+        // grass
+        if(
+        world[y][x] !== SHADOWLAND &&
+        Math.random() < 0.16
+        ) {
+            sceneryGrass.push({
+                x: px,
+                y: py
+            });
+        }
+
+        if(
+        world[y][x] === SHADOWLAND &&
+        Math.random() < 0.16
+        ) {
+        witheredGrass.push({
+        x: px,
+        y: py
+        });
+        }
+
+        // normal bowlders
+        if(
+        world[y][x] !== SHADOWLAND &&
+        Math.random() < 0.013
+        ) { 
+            bowlders.push({
+                x: px,
+                y: py,
+                size: 52
+            });
+        }
+
+        // big bowlders
+        if(
+        world[y][x] !== SHADOWLAND &&
+        Math.random() < 0.006
+        ) {
+            bigBowlders.push({
+                x: px,
+                y: py,
+                size: 140
+            });
+        }
+
+        // cumberkelps
+        const biomeTile = world[y][x];
+
+        const cumberChance =
+        biomeTile === SHADOWLAND
+        ? 0.04
+        : 0.005;
+
+        if(Math.random() < cumberChance) {
+            cumberkelps.push({
+                x: px,
+                y: py,
+                damageCooldown: 0,
+                flipTimer: Math.random() * 60
+            });
+        }
+
+        // broken boats
+        if(Math.random() < 0.0015) {
+            brokenBoats.push({
+                x: px,
+                y: py,
+                size: 130
+            });
+        }
+
+        
+    }
+}
+movePlayerToSafeSpot();
+
+const keys = {};
+let isDead = false;
+let fishFoodCooldown = 0;
+let survivalScore = 0;
+let finalScore = 0;
+let hudScale = 1;
+
+window.addEventListener("keydown", e=>{
+
+    const key = e.key.toLowerCase();
+
+    keys[key] = true;
+
+    if(isDead && key === "r") {
+        respawnPlayer();
+    }
+});
+
+window.addEventListener("keyup", e=>{
+    keys[e.key.toLowerCase()] = false;
+});
+
+function drawUpgradeIcons() {
+
+    const size = 56;
+
+    const startX = 22;
+    const startY = 250;
+
+    // Boots
+    if(waterBootsCollected) {
+
+        ctx.drawImage(
+            waterBootsImg,
+            startX,
+            startY,
+            size,
+            size
+        );
+    }
+
+    // Flippers
+    if(flippersCollected) {
+
+        ctx.drawImage(
+            flipperImg,
+            startX,
+            startY + 65,
+            size,
+            size
+        );
+    }
+
+    // Backpack
+    if(backpackCollected) {
+
+        ctx.drawImage(
+            backpackImg,
+            startX,
+            startY + 130,
+            size,
+            size
+        );
+    }
+
+    if(binocularsCollected) {
+
+    ctx.drawImage(
+        binocularsImg,
+        startX,
+        startY + 195,
+        size,
+        size
+    );
+    }
+}
+
+function getTileAt(px, py) {
+
+    const tx = Math.floor(px / TILE);
+    const ty = Math.floor(py / TILE);
+
+    if(tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H)
+        return LAND;
+
+    return world[ty][tx];
+}
+
+function playerInSanctuary() {
+    return getTileAt(player.x, player.y) === SANCTUARY_FLOOR;
+}
+
+const OCEAN_SANCTUARY = {
+    cx: Math.floor(MAP_W * 0.825), // dead center of ocean biome
+    cy: Math.floor(MAP_H * 0.5),
+    radius: 3 // diameter 7 tiles
+};
+
+function makeOceanSanctuary() {
+
+    const cx = OCEAN_SANCTUARY.cx;
+    const cy = OCEAN_SANCTUARY.cy;
+    const r = OCEAN_SANCTUARY.radius;
+
+    for(let y = cy - r - 1; y <= cy + r + 1; y++) {
+        for(let x = cx - r - 1; x <= cx + r + 1; x++) {
+
+            if(
+                x < 0 || y < 0 ||
+                x >= MAP_W || y >= MAP_H
+            ) continue;
+
+            const dist = Math.hypot(x - cx, y - cy);
+
+            if(dist <= r) {
+                world[y][x] = SANCTUARY_FLOOR;
+            }
+            else if(dist <= r + 1) {
+                world[y][x] = SANCTUARY_WALL;
+            }
+        }
+    }
+
+    // four 1-tile entrances
+
+    world[cy - r - 1][cx] = SANCTUARY_FLOOR;
+    world[cy + r + 1][cx] = SANCTUARY_FLOOR;
+    world[cy][cx - r - 1] = SANCTUARY_FLOOR;
+    world[cy][cx + r + 1] = SANCTUARY_FLOOR;
+    }
+
+makeOceanSanctuary();
+
+function makeBuilding() {
+
+    const bx = building.x;
+    const by = building.y;
+    const bw = building.w;
+    const bh = building.h;
+
+    // floor
+    for(let y=by; y<by+bh; y++) {
+        for(let x=bx; x<bx+bw; x++) {
+
+            world[y][x] = FLOOR;
+        }
+    }
+
+    // outer walls
+    for(let x=bx; x<bx+bw; x++) {
+
+        world[by][x] = WALL;
+        world[by+bh-1][x] = WALL;
+    }
+
+    for(let y=by; y<by+bh; y++) {
+
+        world[y][bx] = WALL;
+        world[y][bx+bw-1] = WALL;
+    }
+
+    // top entrance
+    world[by][bx + Math.floor(bw/2)] = FLOOR;
+    world[by][bx + Math.floor(bw/2)-1] = FLOOR;
+
+    // bottom entrance
+    world[by+bh-1][bx + Math.floor(bw/2)] = FLOOR;
+    world[by+bh-1][bx + Math.floor(bw/2)-1] = FLOOR;
+
+    // left room wall — full interior height, with a doorway gap
+    for(let y=by+1; y<by+bh-1; y++) {
+        if(y === by+Math.floor(bh/2) || y === by+Math.floor(bh/2)-1) continue; // doorway
+        world[y][bx+8] = WALL;
+    }
+
+    // right room wall — full interior height, with a doorway gap
+    for(let y=by+1; y<by+bh-1; y++) {
+        if(y === by+Math.floor(bh/2) || y === by+Math.floor(bh/2)-1) continue; // doorway
+        world[y][bx+bw-9] = WALL;
+    }
+
+    // central box — drawn last so nothing overwrites it
+    for(let x=bx+11; x<bx+15; x++) {
+        world[by+7][x] = WALL;
+        world[by+11][x] = WALL;
+    }
+
+    for(let y=by+7; y<=by+11; y++) {
+        world[y][bx+11] = WALL;
+        world[y][bx+14] = WALL;
+    }
+
+    // open one side of the central box as a doorway
+    world[by+11][bx+12] = FLOOR;
+    world[by+11][bx+13] = FLOOR;
+}
+
+makeBuilding();
+
+let flipperX;
+let flipperY;
+
+while(true) {
+
+    const tx = Math.floor(Math.random() * MAP_W);
+    const ty = Math.floor(Math.random() * MAP_H);
+
+    if(world[ty][tx] === SAND) {
+
+        flipperX = tx * TILE + TILE/2;
+        flipperY = ty * TILE + TILE/2;
+
+        break;
+    }
+}
+
+const flippers = {
+    x: flipperX,
+    y: flipperY,
+    collected: false
+};
+
+let backpackX;
+let backpackY;
+
+while(true) {
+
+    const tx = Math.floor(Math.random() * MAP_W);
+    const ty = Math.floor(Math.random() * MAP_H);
+
+    if(world[ty][tx] === SHADOWLAND) {
+
+        backpackX = tx * TILE + TILE / 2;
+        backpackY = ty * TILE + TILE / 2;
+
+        break;
+    }
+}
+
+const backpack = {
+    x: backpackX,
+    y: backpackY,
+    collected: false
+};
+
+const binoculars = {
+    x: OCEAN_SANCTUARY.cx * TILE + TILE/2,
+    y: OCEAN_SANCTUARY.cy * TILE + TILE/2,
+    collected: false
+};
+
+const jetski = {
+    x: (OCEAN_SANCTUARY.cx + 5) * TILE,
+    y: OCEAN_SANCTUARY.cy * TILE,
+
+    mounted: false,
+    parked: true
+};
+
+let ridingJetski = false;
+
+const helicopter = {
+    x: (building.x + building.w + 6) * TILE,
+    y: (building.y + building.h + 4) * TILE,
+
+    active: false
+};
+
+function updatePlayer() {
+    if(isDead) return;
+    let speed = player.speed;
+    if(getTileAt(player.x, player.y) === SHADOWLAND) {
+    speed *= 0.75;
+    }
+
+    if(getTileAt(player.x, player.y) === WATER) {
+
+    let swimMultiplier = 0.33;
+
+    if(flippersCollected)
+        swimMultiplier *= 1.25;
+
+    speed *= swimMultiplier;
+    }
+
+    for(const k of cumberkelps) {
+        const kTileX = Math.floor(k.x / TILE);
+        const kTileY = Math.floor(k.y / TILE);
+
+        const pTileX = Math.floor(player.x / TILE);
+        const pTileY = Math.floor(player.y / TILE);
+
+        if(
+            Math.abs(pTileX - kTileX) <= 1 &&
+            Math.abs(pTileY - kTileY) <= 1
+        ) {
+            speed *= 0.33;
+            break;
+        }
+    }
+
+    const prevX = player.x;
+    const prevY = player.y;
+
+    if(keys["w"]) {
+    player.y -= speed;
+    playerFacing = "back";
+    }
+
+    if(keys["s"]) {
+    player.y += speed;
+    playerFacing = "front";
+    }
+
+    if(keys["a"]) player.x -= speed;
+    if(keys["d"]) player.x += speed;
+
+    // Sliding collision: test each axis independently
+    const tileXY = getTileAt(player.x, player.y);
+    const hitXY = tileXY === WALL || isInsideBigBowlder(player.x, player.y);
+
+    if(hitXY) {
+        // Try keeping only the X movement
+        const tileXonly = getTileAt(player.x, prevY);
+        const hitXonly = tileXonly === WALL || isInsideBigBowlder(player.x, prevY);
+
+        // Try keeping only the Y movement
+        const tileYonly = getTileAt(prevX, player.y);
+        const hitYonly = tileYonly === WALL || isInsideBigBowlder(prevX, player.y);
+
+        if(!hitXonly) {
+            // X is fine, block Y
+            player.y = prevY;
+        } else if(!hitYonly) {
+            // Y is fine, block X
+            player.x = prevX;
+        } else {
+            // Both axes blocked — full stop
+            player.x = prevX;
+            player.y = prevY;
+        }
+    }
+
+    player.x = Math.max(
+    player.size,
+    Math.min(player.x, MAP_W * TILE - player.size)
+    );
+
+    player.y = Math.max(
+    player.size,
+    Math.min(player.y, MAP_H * TILE - player.size)
+    );
+}
+
+
+
+function updateEnemies() {
+
+    for(const c of coastlings) {
+
+        let dx = player.x - c.x;
+        let dy = player.y - c.y;
+
+        let dist = Math.hypot(dx, dy);
+
+        if(dist > 0 && dist < 500) {
+
+            let nextX = c.x + dx / dist * c.speed;
+            let nextY = c.y + dy / dist * c.speed;
+
+            if(
+            getTileAt(nextX, nextY) !== WALL &&
+            !isInsideBigBowlder(nextX, nextY)
+            ) {
+
+            c.x = nextX;
+            c.y = nextY;
+            if(dx<-5)
+                c.facing=-1;
+            else if(dx>5)
+                c.facing=1;
+            }
+        }
+
+        if(c.damageCooldown > 0)
+            c.damageCooldown--;
+
+        if(dist < 30 && c.damageCooldown <= 0) {
+
+            player.hp -= 20;
+            takeDamageSound.currentTime = 0;
+            takeDamageSound.play();
+
+            c.damageCooldown = 60;
+
+            if(player.hp <= 0){
+                player.hp = 0;
+                finalScore = survivalScore;
+                isDead = true;
+            }
+        }
+    }
+
+    for(const a of adultCoastlings) {
+
+        let dx = player.x - a.x;
+        let dy = player.y - a.y;
+
+        let dist = Math.hypot(dx, dy);
+        a.aggroed = dist < 700;
+
+        if(dist>0 && dist < 700) {
+
+            let nextX = a.x + dx / dist * a.speed;
+            let nextY = a.y + dy / dist * a.speed;
+
+            if(getTileAt(nextX, nextY) !== WALL) {
+
+            a.x = nextX;
+            a.y = nextY;
+            if(dx<-5)
+                a.facing=-1;
+            else if(dx>5)
+                a.facing=1;
+            }
+        }
+
+        if(a.damageCooldown > 0)
+            a.damageCooldown--;
+
+        if(dist < 55 && a.damageCooldown <= 0) {
+
+            player.hp -= 50;
+            takeDamageSound.currentTime = 0;
+            takeDamageSound.play();
+
+            a.damageCooldown = 90;
+
+            if(player.hp <= 0) {
+
+                player.hp = 0;
+                finalScore = survivalScore;
+                isDead = true;
+            }
+        }
+    }
+}
+
+function updateCrabs() {
+
+    for(const c of crabs) {
+
+        if(c.collected)
+            continue;
+
+        // circular motion
+        c.angle += c.speed;
+
+        c.x =
+            c.centerX +
+            Math.cos(c.angle) * c.radius;
+
+        c.y =
+            c.centerY +
+            Math.sin(c.angle) * c.radius;
+
+        let dx = player.x - c.x;
+        let dy = player.y - c.y;
+
+        let dist = Math.hypot(dx, dy);
+
+        // pickup
+        if(dist < 38) {
+
+            // increase max hp
+            player.maxHp += 10;
+
+            // fully heal bonus hp too
+            player.hp += 10;
+
+            if(player.hp > player.maxHp)
+                player.hp = player.maxHp;
+
+            c.collected = true;
+        }
+    }
+}
+
+function updateCumberkelps() {
+
+    for(const k of cumberkelps) {
+
+        // flip every second
+        k.flipTimer++;
+
+        
+
+        let dx = player.x - k.x;
+        let dy = player.y - k.y;
+
+        let dist = Math.hypot(dx, dy);
+
+        if(k.damageCooldown > 0)
+            k.damageCooldown--;
+
+        // contact damage
+        if(dist < 45 && k.damageCooldown <= 0) {
+
+            player.hp -= 10;
+            takeDamageSound.currentTime = 0;
+            takeDamageSound.play();
+
+            k.damageCooldown = 60;
+
+            if(player.hp <= 0) {
+
+                player.hp = 0;
+                finalScore = survivalScore;
+                isDead = true;
+            }
+        }
+    }
+}
+
+function updateFish() {
+
+    for(const f of fishes) {
+
+        let nextX = f.x + f.dirX * f.speed;
+        let nextY = f.y + f.dirY * f.speed;
+
+        if(getTileAt(nextX, nextY) !== WATER) {
+
+            f.dirX *= -1;
+            f.dirY *= -1;
+        } else {
+
+            f.x = nextX;
+            f.y = nextY;
+        }
+
+        let dx = player.x - f.x;
+        let dy = player.y - f.y;
+
+        let dist = Math.hypot(dx, dy);
+
+        if(dist < 25 && fishFoodCooldown <= 0) {
+
+            player.food += 40;
+
+            if(player.food > 100)
+                player.food = 100;
+
+            fishFoodCooldown = 60 * 30;
+        }
+    }
+}
+
+function updateClickers() {
+    for(const c of clickers) {
+        c.flipTimer++;
+
+        if(c.flipTimer >= 60) {
+
+        c.flipTimer = 0;
+
+        if(c.currentSprite === clickerImg)
+        c.currentSprite = clickerRestImg;
+        else
+        c.currentSprite = clickerImg;
+        }
+
+        let nextX = c.x + c.dirX * c.speed;
+        let nextY = c.y + c.dirY * c.speed;
+
+        // bounded to ocean only
+        if(
+            getTileAt(nextX, nextY) !== WATER ||
+            nextX < MAP_W * TILE * 0.65
+        ) {
+
+            c.dirX *= -1;
+            c.dirY *= -1;
+
+        } else {
+
+            c.x = nextX;
+            c.y = nextY;
+        }
+
+        let dx = player.x - c.x;
+        let dy = player.y - c.y;
+
+        let dist = Math.hypot(dx, dy);
+
+        if(c.damageCooldown > 0)
+            c.damageCooldown--;
+
+        if(dist < 55 && c.damageCooldown <= 0) {
+
+            player.hp -= 30;
+            takeDamageSound.currentTime = 0;
+            takeDamageSound.play();
+
+            c.damageCooldown = 60;
+
+            if(player.hp <= 0) {
+
+                player.hp = 0;
+                finalScore = survivalScore;
+                isDead = true;
+            }
+        }
+    }
+}
+
+function updateCoodas() {
+    for(const c of coodas) {
+
+        let nextX = c.x + c.dirX * c.speed;
+        let nextY = c.y + c.dirY * c.speed;
+
+        if(
+            getTileAt(nextX, nextY) !== WATER ||
+            nextX < MAP_W * TILE * 0.65
+        ) {
+
+            c.dirX *= -1;
+            c.dirY *= -1;
+
+        } else {
+
+            c.x = nextX;
+            c.y = nextY;
+        }
+
+        let dx = player.x - c.x;
+        let dy = player.y - c.y;
+
+        let dist = Math.hypot(dx, dy);
+
+        if(c.damageCooldown > 0)
+            c.damageCooldown--;
+
+        if(dist < 55 && c.damageCooldown <= 0) {
+
+            player.hp -= 15;
+
+            takeDamageSound.currentTime = 0;
+            takeDamageSound.play();
+
+            c.damageCooldown = 60;
+
+            if(player.hp <= 0) {
+
+                player.hp = 0;
+                finalScore = survivalScore;
+                isDead = true;
+            }
+        }
+    }
+}
+
+function updateJellies() {
+
+    for(const j of jellies) {
+
+        j.pulseTimer++;
+
+        let nextX = j.x + j.dirX * j.speed;
+        let nextY = j.y + j.dirY * j.speed;
+
+        // cannot leave ocean
+        if(
+            getTileAt(nextX, nextY) !== WATER ||
+            nextX < MAP_W * TILE * 0.65
+        ) {
+
+            j.dirX *= -1;
+            j.dirY *= -1;
+
+        } else {
+
+            j.x = nextX;
+            j.y = nextY;
+        }
+
+        let dx = player.x - j.x;
+        let dy = player.y - j.y;
+
+        let dist = Math.hypot(dx, dy);
+
+        if(j.damageCooldown > 0)
+            j.damageCooldown--;
+
+        if(dist < 60 && j.damageCooldown <= 0) {
+
+            player.hp -= 40;
+
+            takeDamageSound.currentTime = 0;
+            takeDamageSound.play();
+
+            j.damageCooldown = 80;
+
+            if(player.hp <= 0) {
+
+                player.hp = 0;
+                finalScore = survivalScore;
+                isDead = true;
+            }
+        }
+    }
+}
+
+function updateVoomer() {
+
+    // ONLY active in ocean
+    if(player.x < MAP_W * TILE * 0.65)
+        return;
+
+    // flip sprite every second
+    voomer.flipTimer++;
+
+    if(voomer.flipTimer >= 60) {
+
+        voomer.flipTimer = 0;
+
+        if(voomer.currentSprite === voomerLeftImg)
+            voomer.currentSprite = voomerRightImg;
+        else
+            voomer.currentSprite = voomerLeftImg;
+    }
+
+    let dx = player.x - voomer.x;
+    let dy = player.y - voomer.y;
+
+    let dist = Math.hypot(dx, dy);
+
+    // huge aggro range in ocean
+    if(dist < 1400) {
+
+        let moveX = dx / dist * voomer.speed;
+        let moveY = dy / dist * voomer.speed;
+
+        let nextX = voomer.x + moveX;
+        let nextY = voomer.y + moveY;
+
+        // cannot leave right ocean
+        if(
+            getTileAt(nextX, nextY) === WATER &&
+            nextX > MAP_W * TILE * 0.65
+        ) {
+
+            voomer.x = nextX;
+            voomer.y = nextY;
+        }
+
+        if(dx < -5)
+            voomer.facing = -1;
+        else if(dx > 5)
+            voomer.facing = 1;
+    }
+
+    if(voomer.damageCooldown > 0)
+        voomer.damageCooldown--;
+
+    // massive contact hit
+    const dxHit = player.x - voomer.x;
+    const dyHit = player.y - voomer.y;
+
+    const hitboxX = 240; // wide
+    const hitboxY = 120;  // shorter vertically
+
+    const insideHitbox =
+    (dxHit * dxHit) / (hitboxX * hitboxX) +
+    (dyHit * dyHit) / (hitboxY * hitboxY)
+    <= 1;
+
+    if(insideHitbox && voomer.damageCooldown <= 0) {
+
+        player.hp -= 200;
+
+        takeDamageSound.currentTime = 0;
+        takeDamageSound.play();
+
+        voomer.damageCooldown = 90;
+
+        if(player.hp <= 0) {
+
+            player.hp = 0;
+
+            finalScore = survivalScore;
+
+            isDead = true;
+        }
+    }
+}
+
+function updateViperheads() {
+
+    for(const v of viperheads) {
+
+        let dx = player.x - v.x;
+        let dy = player.y - v.y;
+
+        let dist = Math.hypot(dx, dy);
+
+        const stopDistance = TILE * 2;
+
+        // same left/right flip logic as coastlings
+        if(dx < -5)
+            v.facing = -1;
+        else if(dx > 5)
+            v.facing = 1;
+
+        if(v.attackCooldown > 0)
+            v.attackCooldown--;
+
+        // pursue until within 2 tiles
+        const aggroRange = 800; 
+        if(dist < aggroRange)
+        v.aggroed = true;
+
+        if(
+        v.aggroed &&
+        dist < aggroRange &&
+        dist > stopDistance
+        ) {
+
+        const moveX = dx / dist * v.speed;
+        const moveY = dy / dist * v.speed;
+
+        const nextX = v.x + moveX;
+        const nextY = v.y + moveY;
+
+        v.x = nextX;
+        v.y = nextY;
+        
+        }
+        else if(
+        v.aggroed &&
+        dist <= stopDistance &&
+        v.attackCooldown <= 0
+        ) {
+
+
+        const centerTileX =
+            Math.floor(v.x / TILE);
+
+        const centerTileY =
+            Math.floor(v.y / TILE);
+
+        // visual warning area
+        for(let oy = -5; oy <= 5; oy++) {
+            for(let ox = -5; ox <= 5; ox++) {
+
+                if(Math.hypot(ox, oy) <= 5) {
+
+                    viperAttackEffects.push({
+                        x: (centerTileX + ox) * TILE + TILE/2,
+                        y: (centerTileY + oy) * TILE + TILE/2,
+                        timer: 60
+                    });
+                }
+            }
+        }
+
+        // actual damage radius
+        const attackRadius = TILE * 5;
+
+        if(
+            Math.hypot(
+                player.x - v.x,
+                player.y - v.y
+                ) <= attackRadius
+        ) {
+
+            player.hp -= 35;
+
+            takeDamageSound.currentTime = 0;
+            takeDamageSound.play();
+
+            if(player.hp <= 0) {
+
+                player.hp = 0;
+                finalScore = survivalScore;
+                isDead = true;
+            }
+        }
+
+        v.attackCooldown = 60;
+        }
+    }
+
+    for(let i = viperAttackEffects.length - 1; i >= 0; i--) {
+
+        viperAttackEffects[i].timer--;
+
+        if(viperAttackEffects[i].timer <= 0)
+            viperAttackEffects.splice(i, 1);
+    }
+}
+
+function updateFilters() {
+    for(const f of filters) {
+        let dx = player.x - f.x;
+        let dy = player.y - f.y;
+        let dist = Math.hypot(dx, dy);
+        if(dist < 45) {
+            player.water = 100;
+        }
+    }
+}
+
+function updateWaterBoots() {
+
+    if(waterBoots.collected)
+        return;
+
+    const dx = player.x - waterBoots.x;
+    const dy = player.y - waterBoots.y;
+
+    const dist = Math.hypot(dx, dy);
+
+    if(dist < 45) {
+
+        // permanent one-time buff
+        if(!waterBootsCollected) {
+
+            player.speed *= 1.25;
+
+            waterBootsCollected = true;
+        }
+
+        // delete forever
+        waterBoots.collected = true;
+    }
+}
+
+function updateFlippers() {
+
+    if(flippers.collected)
+        return;
+
+    const dx = player.x - flippers.x;
+    const dy = player.y - flippers.y;
+
+    const dist = Math.hypot(dx, dy);
+
+    if(dist < 45) {
+
+        flippersCollected = true;
+
+        flippers.collected = true;
+    }
+}
+
+function updateBackpack() {
+
+    if(backpack.collected)
+        return;
+
+    const dx = player.x - backpack.x;
+    const dy = player.y - backpack.y;
+
+    const dist = Math.hypot(dx, dy);
+
+    if(dist < 45) {
+
+        backpackCollected = true;
+
+        backpack.collected = true;
+    }
+}
+
+function updateBinoculars() {
+
+    if(binoculars.collected)
+        return;
+
+    const dx = player.x - binoculars.x;
+    const dy = player.y - binoculars.y;
+
+    const dist = Math.hypot(dx, dy);
+
+    if(dist < 45) {
+
+        binocularsCollected = true;
+
+        binoculars.collected = true;
+
+        canvas.width *= 2;
+        canvas.height *= 2;
+        hudScale = 2;
+    }
+}
+
+let lastWaterX = jetski.x;
+let lastWaterY = jetski.y;
+
+function updateJetski() {
+
+    const dx = player.x - jetski.x;
+    const dy = player.y - jetski.y;
+
+    const dist = Math.hypot(dx, dy);
+
+    // MOUNT
+    if(
+        !ridingJetski &&
+        dist < 55 &&
+        getTileAt(jetski.x, jetski.y) === WATER
+    ) {
+
+        ridingJetski = true;
+
+        player.speed = 9;
+
+        playerFacing = "back";
+
+        jetski.mounted = true;
+        jetski.parked = false;
+    }
+
+    if(!ridingJetski)
+        return;
+
+    // remember last water position
+    if(
+        getTileAt(player.x, player.y) === WATER
+    ) {
+        lastWaterX = player.x;
+        lastWaterY = player.y;
+    }
+
+    // jetski follows player
+    jetski.x = player.x;
+    jetski.y = player.y;
+
+    const tile = getTileAt(
+        player.x,
+        player.y
+    );
+
+    const mustDismount =
+
+        tile === LAND ||
+        tile === GRASS ||
+        tile === ROCK ||
+        tile === SAND ||
+        tile === FLOOR ||
+        tile === WALL ||
+        tile === SHADOWLAND ||
+        tile === SANCTUARY_FLOOR ||
+        tile === SANCTUARY_WALL;
+
+    if(mustDismount) {
+
+        ridingJetski = false;
+
+        jetski.mounted = false;
+        jetski.parked = true;
+
+        // leave jetski at last water tile
+        jetski.x = lastWaterX;
+        jetski.y = lastWaterY;
+
+        // restore walking speed
+        player.speed =
+            waterBootsCollected
+            ? 3.25
+            : 2.6;
+
+        // return to normal player
+        playerFacing = "front";
+
+        // move player onto land
+        const push = 50;
+
+        if(keys["w"]) player.y -= push;
+        if(keys["s"]) player.y += push;
+        if(keys["a"]) player.x -= push;
+        if(keys["d"]) player.x += push;
+    }
+}
+
+function updateHelicopter() {
+
+    helicopter.active =
+        player.maxHp >= 200 &&
+        waterBootsCollected &&
+        flippersCollected &&
+        backpackCollected &&
+        binocularsCollected;
+}
+
+function checkHelicopterEnding() {
+
+    if(!helicopter.active)
+        return;
+
+    const dx = player.x - helicopter.x;
+    const dy = player.y - helicopter.y;
+
+    if(Math.hypot(dx, dy) < 120) {
+
+        endingTriggered = true;
+        takeDamageSound.pause();
+        takeDamageSound.currentTime = 0;
+        bgMusic.pause();
+        bgMusic.currentTime = 0;
+        
+        if(seaMusic.paused) {
+        seaMusic.currentTime = 0;
+        seaMusic.play().catch(()=>{});
+        }
+        document.getElementById("menu").style.display = "flex";
+        document.getElementById("endingText").style.display = "block";
+
+        canvas.style.display = "none";
+    }
+}
+
+setInterval(() => {
+
+    if(isDead) return;
+
+    survivalScore++;
+
+}, 1000);
+
+// FOOD DEPLETION
+setInterval(() => {
+
+    if(isDead) return;
+
+    const drain = backpackCollected ? 0.5 : 1;
+
+    player.food -= drain;
+
+    if(player.food < 0)
+        player.food = 0;
+
+}, 2000);
+
+// WATER DEPLETION
+setInterval(() => {
+
+    if(isDead) return;
+
+    player.water -= backpackCollected ? 0.5 : 1;
+
+    if(player.water < 0)
+        player.water = 0;
+
+}, 2000);
+
+setInterval(() => {
+
+    if(player.food <= 0 || player.water <= 0) {
+        player.hp -= 5;
+
+        if(player.hp <= 0) {
+            player.hp = 0;
+            finalScore = survivalScore;
+            isDead = true;
+        }
+    }
+
+}, 1000);
+
+setInterval(() => {
+
+    if(isDead) return;
+
+    // regenerate health if well fed + hydrated
+    if(
+        player.food > 90 &&
+        player.water > 90 &&
+        player.hp < player.maxHp
+    ) {
+
+        player.hp += 1;
+
+        if(player.hp > player.maxHp)
+            player.hp = player.maxHp;
+    }
+
+}, 1000);
+
+
+function drawWorld() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    const startX = Math.floor(camX / TILE);
+    const startY = Math.floor(camY / TILE);
+
+    const endX = startX + Math.ceil(canvas.width/TILE)+2;
+    const endY = startY + Math.ceil(canvas.height/TILE)+2;
+
+    for(let y=startY;y<endY;y++) {
+        for(let x=startX;x<endX;x++) {
+
+            if(x<0 || y<0 || x>=MAP_W || y>=MAP_H)
+                continue;
+
+            let tile = world[y][x];
+
+            let sx = x*TILE - camX;
+            let sy = y*TILE - camY;
+
+            // LAND
+            if(tile === LAND) {
+
+                ctx.fillStyle = "#7a5c2e";
+                ctx.fillRect(sx, sy, TILE, TILE);
+
+                ctx.fillStyle = "rgba(0,0,0,0.08)";
+                ctx.fillRect(sx, sy, TILE, TILE);
+
+                for(let i=0;i<10;i++) {
+
+                    const seed = x * 831 + y * 1921 + i * 77;
+
+                    const px = (seed * 13) % TILE;
+                    const py = (seed * 29) % TILE;
+
+                    ctx.fillStyle =
+                        i % 2 === 0
+                        ? "rgba(0,0,0,0.06)"
+                        : "rgba(255,255,255,0.012)";
+
+                    ctx.fillRect(
+                        sx + px,
+                        sy + py,
+                        4,
+                        4
+                    );
+                }
+            }
+
+            // WATER
+            else if(tile === WATER) {
+
+                // ocean starts here
+            const oceanStart = MAP_W * 0.65;
+
+            let oceanDepth = 0;
+
+            // ONLY darken the giant right ocean
+            if(x > oceanStart) {
+
+            oceanDepth =
+            (x - oceanStart) /
+            (MAP_W - oceanStart);
+
+            // stronger contrast curve
+            oceanDepth =
+            Math.pow(oceanDepth, 1.8);
+            }
+
+            // much stronger darkening
+            const r = Math.floor(32 - oceanDepth * 28);
+            const g = Math.floor(73 - oceanDepth * 58);
+            const b = Math.floor(106 - oceanDepth * 76);
+
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+
+            ctx.fillRect(sx, sy, TILE, TILE);
+
+            if(
+            x > oceanStart &&
+            world[y][x - 1] !== WATER
+            ) {
+
+            const wave =
+            Math.sin(y * 0.35) * 6 +
+            Math.sin(y * 0.12) * 3;
+
+            ctx.fillStyle = "rgba(255,255,255,0.85)";
+
+            ctx.beginPath();
+
+            ctx.moveTo(sx, sy);
+
+            ctx.lineTo(
+            sx + 8 + wave,
+            sy
+            );
+
+            ctx.lineTo(
+            sx + 14 + wave,
+            sy + TILE * 0.25
+            );
+
+            ctx.lineTo(
+            sx + 8 + wave,
+            sy + TILE * 0.5
+            );
+
+            ctx.lineTo(
+            sx + 14 + wave,
+            sy + TILE * 0.75
+            );
+
+            ctx.lineTo(
+            sx + 8 + wave,
+            sy + TILE
+            );
+
+            ctx.lineTo(
+            sx,
+            sy + TILE
+            );
+
+            ctx.closePath();
+
+            ctx.fill();
+            }
+
+            // water sparkle details
+            ctx.fillStyle = "rgba(255,255,255,0.22)";
+
+            for(let i=0;i<3;i++) {
+
+            const seed =
+            (x * 928371 + y * 12377 + i * 19283);
+
+            const px =
+            ((seed * 16807) % TILE);
+
+            const py =
+            ((seed * 48271) % TILE);
+
+            ctx.fillRect(
+            sx + px,
+            sy + py,
+            8,
+            2
+            );
+            }
+            }
+
+            else if(tile === SAND) {
+
+            ctx.fillStyle = "#c2a56c";
+
+            ctx.fillRect(
+            sx,
+            sy,
+            TILE,
+            TILE
+            );
+
+            ctx.fillStyle = "rgba(255,255,255,0.05)";
+
+            for(let i=0;i<6;i++) {
+
+            const seed =
+            x * 7123 +
+            y * 9127 +
+            i * 199;
+
+            const px =
+            (seed * 37) % TILE;
+
+            const py =
+            (seed * 17) % TILE;
+
+            ctx.fillRect(
+            sx + px,
+            sy + py,
+            2,
+            2
+            );
+            }
+
+            }
+
+            // WALL
+            else if(tile === WALL) {
+
+            ctx.fillStyle = "#3a3a3a";
+
+            ctx.fillRect(
+            sx,
+            sy,
+            TILE,
+            TILE
+            );
+
+            ctx.fillStyle = "rgba(255,255,255,0.08)";
+
+            ctx.fillRect(
+            sx,
+            sy,
+            TILE,
+            4
+            );
+            }
+
+            //SANCTUARY WALL
+            else if(tile === SANCTUARY_WALL) {
+
+            ctx.fillStyle = "#8c4522"; // rusty dark orange/red
+
+            ctx.fillRect(
+            sx,
+            sy,
+            TILE,
+            TILE
+            );
+
+            ctx.fillStyle = "rgba(255,255,255,0.08)";
+
+            ctx.fillRect(
+            sx,
+            sy,
+            TILE,
+            4
+            );
+            }
+
+            // FLOOR
+            else if(tile === FLOOR) {
+
+            ctx.fillStyle = "#9a9a9a";
+
+            ctx.fillRect(
+                sx,
+                sy,
+                TILE,
+                TILE
+            );
+
+            ctx.strokeStyle = "rgba(0,0,0,0.08)";
+
+            ctx.strokeRect(
+            sx,
+            sy,
+            TILE,
+            TILE
+            );
+            }
+
+            //SANCTUARY FLOOR
+            else if(tile === SANCTUARY_FLOOR) {
+
+            ctx.fillStyle = "#c89a63"; // light brown
+
+            ctx.fillRect(
+            sx,
+            sy,
+            TILE,
+            TILE
+            );
+
+            ctx.strokeStyle = "rgba(0,0,0,0.10)";
+            ctx.strokeRect(
+            sx,
+            sy,
+            TILE,
+            TILE
+            );
+            }
+
+            // ROCKS
+            else if(tile === ROCK) {
+
+                ctx.fillStyle = "#7a5c2e";
+                ctx.fillRect(sx, sy, TILE, TILE);
+
+                ctx.fillStyle = "#333";
+
+                for(let i=0;i<5;i++) {
+                    const seed = x * 991 + y * 313 + i * 97;
+                    const rx = 8 + ((seed * 17) % 24);
+                    const ry = 8 + ((seed * 31) % 24);
+                    const rr = 4 + ((seed * 13) % 5);
+
+                    ctx.beginPath();
+
+                    ctx.arc(
+                        sx + rx,
+                        sy + ry,
+                        rr,
+                        0,
+                        Math.PI*2
+                    );
+
+                    ctx.fill();
+                }
+            }
+
+            // GRASS
+            else if(tile === GRASS) {
+
+                ctx.fillStyle = "#7a5c2e";
+                ctx.fillRect(sx, sy, TILE, TILE);
+
+                ctx.strokeStyle = "#7f6a28";
+
+                for(let i=0;i<7;i++) {
+                    const seed = x * 7123 + y * 9127 + i * 199;
+                    const gx = 4 + ((seed * 37) % 30);
+                    const gh = 12 + ((seed * 17) % 10);
+
+                    ctx.beginPath();
+
+                    ctx.moveTo(
+                        sx + gx,
+                        sy + 34
+                    );
+
+                    ctx.lineTo(
+                        sx + gx - 2,
+                        sy + 34 - gh
+                    );
+
+                    ctx.stroke();
+                }
+            }
+            else if(tile === SHADOWLAND) {
+
+            ctx.fillStyle = "#2b1d12";
+            ctx.fillRect(sx, sy, TILE, TILE);
+
+            ctx.fillStyle = "rgba(200,120,255,0.12)";
+            ctx.fillRect(sx, sy, TILE, TILE);
+
+
+            for(let i=0;i<10;i++) {
+
+            const seed = x * 719 + y * 1297 + i * 53;
+
+            const px = (seed * 17) % TILE;
+            const py = (seed * 31) % TILE;
+
+            ctx.fillStyle =
+            i % 2
+            ? "rgba(90,55,25,0.45)"
+            : "rgba(45,25,10,0.35)";
+            ctx.fillRect(
+            sx + px,
+            sy + py,
+            4,
+            4
+            );
+            }
+            }
+        }
+    }
+}
+
+function drawHalfSubmerged(
+    img,
+    x,
+    y,
+    width,
+    height,
+    facing = 1
+) {
+
+    const inWater =
+        getTileAt(x, y) === WATER;
+
+    ctx.save();
+
+    ctx.translate(x, y);
+
+    if(facing < 0)
+        ctx.scale(-1, 1);
+
+    // ONLY top half visible in water
+    if(inWater) {
+
+        ctx.beginPath();
+
+        ctx.rect(
+            -width/2,
+            -height/2,
+            width,
+            height * 0.5
+        );
+
+        ctx.clip();
+    }
+
+    ctx.drawImage(
+        img,
+        -width/2,
+        -height/2,
+        width,
+        height
+    );
+
+    ctx.restore();
+}
+
+function drawHologram() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    // red-box location inside building
+    const hx = (building.x + 13) * TILE;
+    const hy = (building.y + 14) * TILE;
+
+    const screenX = hx - camX;
+    const screenY = hy - camY;
+
+    ctx.drawImage(
+        hologramImg,
+        screenX - 40,
+        screenY - 60,
+        80,
+        110
+    );
+}
+
+function drawSceneryGrass() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const g of sceneryGrass) {
+
+        const x = g.x - camX;
+        const y = g.y - camY;
+
+        // fixed taller grass size
+        ctx.drawImage(
+            grassImg,
+            x - 20,
+            y - 34,
+            88,
+            68
+        );
+    }
+}
+
+function drawWitheredGrass() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const g of witheredGrass) {
+
+        const x = g.x - camX;
+        const y = g.y - camY;
+
+        ctx.drawImage(
+            witheredGrassImg,
+            x - 15,
+            y - 34,
+            66,
+            68
+        );
+    }
+}
+
+function drawBowlders() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const b of bowlders) {
+
+        const x = b.x - camX;
+        const y = b.y - camY;
+
+        ctx.drawImage(
+            bowlderImg,
+            x - b.size/2,
+            y - b.size/2,
+            b.size,
+            b.size
+        );
+    }
+}
+
+function drawBigBowlders() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const b of bigBowlders) {
+
+        const x = b.x - camX;
+        const y = b.y - camY;
+
+        ctx.drawImage(
+            bigBowlderImg,
+            x - b.size/2-20,
+            y - b.size/2,
+            b.size,
+            b.size
+        );
+    }
+}
+function isInsideBigBowlder(px, py) {
+
+    for(const b of bigBowlders) {
+
+        const left = b.x - TILE;
+        const right = b.x + TILE;
+
+        const top = b.y - TILE * 1.5;
+        const bottom = b.y + TILE * 1.5;
+
+        if(
+            px > left &&
+            px < right &&
+            py > top &&
+            py < bottom
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function nearBigBowlder(x, y) {
+
+    for(const b of bigBowlders) {
+
+        if(
+            Math.hypot(x - b.x, y - b.y) < 100
+        ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+for(let i = sceneryGrass.length - 1; i >= 0; i--) {
+
+    if(
+        nearBigBowlder(
+            sceneryGrass[i].x,
+            sceneryGrass[i].y
+        )
+    ) {
+        sceneryGrass.splice(i, 1);
+    }
+}
+
+for(let i = bowlders.length - 1; i >= 0; i--) {
+
+    if(
+        nearBigBowlder(
+            bowlders[i].x,
+            bowlders[i].y
+        )
+    ) {
+        bowlders.splice(i, 1);
+    }
+}
+
+function drawBrokenBoats() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const b of brokenBoats) {
+
+        const x = b.x - camX;
+        const y = b.y - camY;
+
+        ctx.drawImage(
+            brokenBoatImg,
+            x - b.size/2,
+            y - b.size/2+7,
+            b.size,
+            b.size * 0.87
+        );
+    }
+}
+
+function drawCumberkelps() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const k of cumberkelps) {
+
+        const x = k.x - camX;
+        const y = k.y - camY;
+
+        ctx.save();
+
+        ctx.translate(x, y);
+        const stretch =
+        1 + 0.5 * (
+        (Math.sin(k.flipTimer * 0.105) + 1) / 2
+        );
+
+        const height = 104 * stretch;
+
+        ctx.drawImage(
+        cumberkelpImg,
+        -52,
+        -height / 2,
+        104,
+        height
+        );
+
+
+        ctx.restore();
+    }
+}
+
+
+function updateDayNightCycle() {
+
+    // smooth looping darkness
+    worldDarkness =
+        (Math.sin(Date.now() * 0.00004) + 1) / 2;
+
+    // remap:
+    // 0 = bright
+    // 1 = dark
+}
+
+function drawPlayer() {
+
+    const x = canvas.width / 2;
+    const y = canvas.height / 2;
+
+    // shadow
+    if(getTileAt(player.x, player.y) !== WATER) {
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        x,
+        y + 24,
+        18,
+        8,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+    }
+
+    let img;
+
+    if(ridingJetski) {
+
+    if(playerFacing === "back")
+        img = jetskiFrontImg;
+    else
+        img = jetskiBackImg;
+
+    } else {
+
+    if(playerFacing === "back")
+        img = playerBackImg;
+    else
+        img = playerFrontImg;
+    }
+
+    ctx.save();
+
+    ctx.translate(x, y);
+
+    if(
+    getTileAt(player.x, player.y) === WATER &&
+    !ridingJetski
+    ) {
+    ctx.beginPath();
+    ctx.rect(-48, -48, 96, 48);
+    ctx.clip();
+    }
+
+    if(ridingJetski) {
+
+    ctx.drawImage(
+        img,
+        -35,
+        -55,
+        70,
+        110
+    );
+
+    } else {
+
+    ctx.drawImage(
+        img,
+        -48,
+        -60,
+        96,
+        96
+    );
+    }
+    ctx.restore();
+}
+
+function drawCoastlings() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const c of coastlings) {
+
+        const x = c.x - camX;
+        const y = c.y - camY;
+
+        // determine facing direction
+        const dx = player.x - c.x;
+
+        ctx.save();
+
+        ctx.translate(x, y);
+        if(c.facing < 0)
+            ctx.scale(-1, 1);
+
+        // shadow
+        if(getTileAt(c.x, c.y) !== WATER) {
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath();
+        ctx.ellipse(0, 38, 18, 8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        }
+
+        // sprite
+        if(getTileAt(c.x, c.y) === WATER) {
+
+        ctx.beginPath();
+        ctx.rect(-30, -54, 60, 54);
+        ctx.clip();
+        }
+
+        ctx.drawImage(
+        coastlingImg,
+        -30,
+        -54,
+        60,
+        90
+        );
+
+        ctx.restore();
+    }
+}
+
+function drawAdultCoastlings() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const a of adultCoastlings) {
+
+        const x = a.x - camX;
+        const y = a.y - camY;
+
+        ctx.save();
+
+        ctx.translate(x, y);
+
+        if(a.facing < 0)
+            ctx.scale(-1, 1);
+
+        if(getTileAt(a.x, a.y) !== WATER) {
+
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+        0,
+        70,
+        32,
+        12,
+        0,
+        0,
+        Math.PI * 2
+        );
+
+        ctx.fill();
+        }
+        if(getTileAt(a.x, a.y) === WATER)
+        {
+        ctx.beginPath();
+        ctx.rect(-72, -105, 144, 105);
+        ctx.clip();
+        }
+
+        const sprite =
+        a.aggroed
+        ? adultImg
+        : adultRestImg;
+
+        ctx.drawImage(
+        sprite,
+        -72,
+        -105,
+        144,
+        210
+        );
+
+        ctx.restore();
+    }
+}
+
+function drawFish() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const f of fishes) {
+
+        const x = f.x - camX;
+        const y = f.y - camY;
+
+        ctx.save();
+
+        ctx.translate(x, y);
+
+        if(f.dirX < 0)
+            ctx.scale(-1, 1);
+
+        ctx.drawImage(
+            fishImg,
+            -36,
+            -20,
+            72,
+            40
+        );
+
+        ctx.restore();
+    }
+}
+
+function drawCrabs() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const c of crabs) {
+
+        if(c.collected)
+            continue;
+
+        const x = c.x - camX;
+        const y = c.y - camY;
+
+        ctx.drawImage(
+            crabImg,
+            x - 28,
+            y - 22,
+            56,
+            44
+        );
+    }
+}
+
+function drawFilters() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const f of filters) {
+
+        const x = f.x - camX;
+        const y = f.y - camY;
+
+        ctx.drawImage(
+            filterImg,
+            x - 35,
+            y - 40,
+            70,
+            80
+        );
+    }
+}
+
+function drawWaterBoots() {
+
+    if(waterBoots.collected)
+        return;
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    const x = waterBoots.x - camX;
+    const y = waterBoots.y - camY;
+
+    ctx.drawImage(
+        waterBootsImg,
+        x - 40,
+        y - 40,
+        80,
+        80
+    );
+}
+
+function drawFlippers() {
+
+    if(flippers.collected)
+        return;
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    const x = flippers.x - camX;
+    const y = flippers.y - camY;
+
+    ctx.drawImage(
+        flipperImg,
+        x - 55,
+        y - 25,
+        110,
+        50
+    );
+}
+
+function drawBackpack() {
+
+    if(backpack.collected)
+        return;
+
+    const camX = player.x - canvas.width / 2;
+    const camY = player.y - canvas.height / 2;
+
+    const x = backpack.x - camX;
+    const y = backpack.y - camY;
+
+    ctx.drawImage(
+        backpackImg,
+        x - 40,
+        y - 50,
+        80,
+        100
+    );
+}
+
+function drawBinoculars() {
+
+    if(binoculars.collected)
+        return;
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    const x = binoculars.x - camX;
+    const y = binoculars.y - camY;
+
+    ctx.drawImage(
+        binocularsImg,
+        x - 40,
+        y - 40,
+        80,
+        80
+    );
+}
+
+function drawJetski() {
+
+    if(ridingJetski)
+        return;
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    const x = jetski.x - camX;
+    const y = jetski.y - camY;
+
+    ctx.drawImage(
+        jetskiEmptyImg,
+        x - 37,
+        y - 57,
+        74,
+        113
+    );
+}
+
+function drawHelicopter() {
+
+    if(!helicopter.active)
+        return;
+
+    const camX = player.x - canvas.width / 2;
+    const camY = player.y - canvas.height / 2;
+
+    const x = helicopter.x - camX;
+    const y = helicopter.y - camY;
+
+    ctx.drawImage(
+        helicopterImg,
+        x - 240,
+        y - 160,
+        480,
+        320
+    );
+}
+
+function drawClickers() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const c of clickers) {
+
+        const x = c.x - camX;
+        const y = c.y - camY;
+
+        ctx.save();
+
+        ctx.translate(x, y);
+
+        if(c.dirX < 0)
+            ctx.scale(-1, 1);
+
+        ctx.drawImage(
+            c.currentSprite,
+            -96,
+            -108,
+            192,
+            216
+        );
+
+        ctx.restore();
+    }
+}
+
+function drawCoodas() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const c of coodas) {
+
+        const x = c.x - camX;
+        const y = c.y - camY;
+
+        ctx.save();
+
+        ctx.translate(x, y);
+
+        if(c.dirX < 0)
+            ctx.scale(-1, 1);
+
+        ctx.drawImage(
+            coodaImg,
+            -80,
+            -80,
+            160,
+            160
+        );
+
+        ctx.restore();
+    }
+}
+
+function drawJellies() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const j of jellies) {
+
+        const x = j.x - camX;
+        const y = j.y - camY;
+
+        // changes from full height to 0.6 every second
+        const pulse =
+            Math.sin(j.pulseTimer * 0.1) > 0
+            ? 1
+            : 0.6;
+
+        ctx.drawImage(
+            jellyImg,
+            x - 70,
+            y - (180 * pulse)/2,
+            140,
+            180 * pulse
+        );
+    }
+}
+
+function drawVoomer() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    const x = voomer.x - camX;
+    const y = voomer.y - camY;
+
+    ctx.save();
+
+    ctx.translate(x, y);
+
+    if(voomer.facing < 0)
+        ctx.scale(-1, 1);
+
+    ctx.drawImage(
+        voomer.currentSprite,
+        -330,
+        -180,
+        660,
+        360
+    );
+
+    ctx.restore();
+}
+
+function drawViperheads() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const v of viperheads) {
+
+        const x = v.x - camX;
+        const y = v.y - camY;
+
+        ctx.save();
+
+        ctx.translate(x, y);
+
+        if(v.facing < 0)
+            ctx.scale(-1, 1);
+
+        ctx.drawImage(
+            viperheadImg,
+            -120,
+            -165,
+            240,
+            270
+        );
+
+        ctx.restore();
+    }
+}
+
+function drawViperAttackEffects() {
+
+    const camX = player.x - canvas.width/2;
+    const camY = player.y - canvas.height/2;
+
+    for(const e of viperAttackEffects) {
+
+        const x = e.x - camX;
+        const y = e.y - camY;
+
+        ctx.drawImage(
+            cumberkelpImg,
+            x - 20,
+            y - 20,
+            40,
+            40
+        );
+    }
+}
+
+
+function drawCircleBar(x, y, radius, value, color, icon) {
+
+    ctx.lineWidth = 10;
+
+    // background
+    ctx.strokeStyle = "#333";
+
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // value arc
+    ctx.strokeStyle = color;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y,
+        radius,
+        -Math.PI / 2,
+        (-Math.PI / 2) + (Math.PI * 2) * (value / 100)
+    );
+
+    ctx.stroke();
+
+    // icon
+    ctx.fillStyle = "white";
+    ctx.font = "22px Arial";
+    ctx.textAlign = "center";
+
+    ctx.fillText(icon, x, y + 8);
+
+    ctx.textAlign = "left";
+
+    // food/water numbers only
+    if(icon !== "♥") {
+
+        ctx.fillStyle = "white";
+        ctx.font = "28px Arial";
+
+        ctx.fillText(
+            Math.floor(value),
+            x + 45,
+            y + 10
+        );
+    }
+}
+
+function drawHUD() {
+    ctx.save();
+    ctx.scale(hudScale, hudScale); // ← added
+    drawCircleBar(50,50,28,(player.hp / player.maxHp) * 100,"#49d14f","♥");
+    ctx.fillStyle = "white";
+    ctx.font = "22px Arial";
+    ctx.fillText(
+    Math.floor(player.hp) + "/" + player.maxHp,
+    95,
+    58
+    );
+
+    drawCircleBar(50,125,28,player.food,"#d8b227","🐟");
+
+    drawCircleBar(50,200,28,player.water,"#3ca4ff","💧");
+    drawUpgradeIcons();
+    ctx.restore()
+}
+
+function drawScore() {
+
+    ctx.fillStyle = "white";
+    ctx.font = "28px Arial";
+
+    ctx.textAlign = "center";
+
+    // after
+    ctx.save();
+    ctx.scale(hudScale, hudScale);
+    ctx.fillText("Score: " + survivalScore, canvas.width / 2 / hudScale, (canvas.height - 30) / hudScale);
+    ctx.restore();
+
+    ctx.textAlign = "left";
+}
+
+function drawDarknessOverlay() {
+
+    // convert darkness amount into opacity
+    const alpha = worldDarkness * 0.72;
+
+    ctx.fillStyle = `rgba(0,0,20,${alpha})`;
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+}
+
+function drawGameOver() {
+
+    if(!isDead) return;
+
+    ctx.fillStyle = "rgba(0,0,0,0.72)";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    ctx.fillStyle = "red";
+    ctx.font = "80px Arial";
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+        "YOU DIED",
+        canvas.width/2,
+        canvas.height/2 - 20
+    );
+
+    ctx.fillStyle = "white";
+    ctx.font = "34px Arial";
+
+    ctx.fillText(
+    "Score: " + finalScore,
+    canvas.width/2,
+    canvas.height/2 + 25
+    );
+
+    ctx.fillStyle = "white";
+    ctx.font = "28px Arial";
+
+    ctx.fillText(
+        "Press R to Respawn",
+        canvas.width/2,
+        canvas.height/2 + 70
+    );
+
+    ctx.font = "18px Arial";
+
+    ctx.fillText(
+        "Respawn at center of map",
+        canvas.width/2,
+        canvas.height/2 + 105
+    );
+
+    ctx.textAlign = "left";
+}
+function movePlayerToSafeSpot() {
+
+    // if stuck inside a big bowlder,
+    // move player 2 tiles to the right
+    if(isInsideBigBowlder(player.x, player.y)) {
+
+        player.x += TILE * 2;
+    }
+}
+
+function respawnPlayer() {
+
+    player.x = (80 + 80) * TILE;
+    player.y = (80 + 80) * TILE;
+
+    // safety correction
+    movePlayerToSafeSpot();
+
+    // respawn with upgraded max hp
+    player.hp = player.maxHp;
+
+    player.food = 50;
+    player.water = 50;
+
+    survivalScore = 0;
+
+    isDead = false;
+}
+
+
+function gameLoop() {
+
+    updatePlayer();
+
+    updateEnemies();
+    updateCumberkelps();
+    updateJellies();
+
+    updateFish();
+
+    updateClickers();
+    updateCoodas();
+
+    updateVoomer();
+    updateViperheads();
+    updateCrabs();
+
+    updateFilters();
+    updateWaterBoots();
+    updateFlippers();
+    updateBackpack();
+    updateJetski();
+    updateBinoculars();
+    updateHelicopter();
+    checkHelicopterEnding();
+    updateDayNightCycle();
+    updateBiomeMusic();
+
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    if(fishFoodCooldown > 0)
+        fishFoodCooldown--;
+
+    drawWorld();
+
+    drawBigBowlders();
+    drawBowlders();
+    drawBrokenBoats();
+    drawCumberkelps();
+    drawSceneryGrass();
+    drawWitheredGrass();
+    drawFilters();
+    drawWaterBoots();
+    drawFlippers();
+    drawBackpack();
+    drawBinoculars();
+    drawHelicopter();
+    drawHologram();
+    drawViperAttackEffects();
+    drawCoastlings();
+    drawAdultCoastlings();
+    drawViperheads();
+    drawJellies();
+    drawVoomer();
+    drawFish();
+    drawClickers();
+    drawCoodas();
+    drawCrabs();
+    drawJetski();
+    drawPlayer();
+
+    drawDarknessOverlay();
+    drawHUD();
+    drawScore();
+    drawGameOver();
+
+    requestAnimationFrame(gameLoop);
+}
+
+document.getElementById("playBtn").onclick = ()=>{
+    bgMusic.play();
+    document.getElementById("menu").style.display = "none";
+
+    canvas.style.display = "block";
+
+    gameLoop();
+};
+
+document.getElementById("quitBtn").onclick = ()=>{
+
+    window.close();
+
+    document.body.innerHTML = `
+    <div style="
+        background:black;
+        color:white;
+        height:100vh;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        font-size:50px;
+    ">
+        Coast Keeper Closed
+    </div>
+    `;
+};
+
+</script>
+</body>
+</html>
